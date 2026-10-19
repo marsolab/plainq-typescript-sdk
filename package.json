@@ -1,0 +1,60 @@
+{
+  "name": "@marsolab/plainq-sdk",
+  "version": "0.1.0",
+  "description": "Typed native gRPC client for PlainQ queues and topics",
+  "license": "MIT",
+  "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "require": {
+        "types": "./dist/index.d.cts",
+        "default": "./dist/index.cjs"
+      }
+    }
+  },
+  "files": [
+    "dist",
+    "proto",
+    "SCHEMA.md"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/marsolab/plainq-typescript-sdk.git"
+  },
+  "homepage": "https://github.com/marsolab/plainq-typescript-sdk#readme",
+  "bugs": {
+    "url": "https://github.com/marsolab/plainq-typescript-sdk/issues"
+  },
+  "scripts": {
+    "generate": "buf generate",
+    "build": "tsup src/index.ts --format esm,cjs --dts --clean",
+    "typecheck": "tsc --noEmit",
+    "test": "npm run build && node --test tests/*.test.mjs",
+    "test:integration": "npm run build && node --test tests/integration.mjs",
+    "prepack": "npm run build"
+  },
+  "dependencies": {
+    "@bufbuild/protobuf": "^2.16.0",
+    "@grpc/grpc-js": "^1.14.6"
+  },
+  "devDependencies": {
+    "@bufbuild/buf": "1.74.0",
+    "@types/node": "26.6.5",
+    "ts-proto": "2.18.0",
+    "tsup": "9.0.0",
+    "typescript": "6.0.3"
+  }
+}

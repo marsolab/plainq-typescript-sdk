@@ -1,0 +1,80 @@
+name: CI
+on:
+  push:
+  pull_request:
+  workflow_call:
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node: [22, 24, 26]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+      - run: npm ci
+      - run: npm run generate
+      - run: git diff --exit-code -- src/generated
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm pack
+      - name: Install packed artifact in a clean consumer
+        run: |
+          package="$PWD/$(ls *.tgz)"
+          cd "$(mktemp -d)"
+          npm init -y
+          npm install "$package"
+          node -e "const {Client} = require('@marsolab/plainq-sdk'); new Client('localhost:8080').close()"
+          node --input-type=module -e "import {Client} from '@marsolab/plainq-sdk'; new Client('localhost:8080').close()"
+  integration:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: marsolab/plainq
+          ref: 22ae8ce1faf01e560d389c51179247f240a6b7e6
+          path: .broker-source
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: .broker-source/go.mod
+          cache-dependency-path: .broker-source/go.sum
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.3
+      - name: Build pinned PlainQ broker
+        run: |
+          cd .broker-source/internal/houston/ui
+          bun install --frozen-lockfile
+          bun run build
+          cd ../../..
+          go build -o "$RUNNER_TEMP/plainq" ./cmd
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Start disposable broker
+        run: |
+          "$RUNNER_TEMP/plainq" serve -grpc.addr 127.0.0.1:18080 -http.addr 127.0.0.1:18081 -storage.path "$RUNNER_TEMP/plainq.db" -auth.enable=false -telemetry.enable=false -auth.jwt.secret "$(openssl rand -hex 32)" > "$RUNNER_TEMP/plainq.log" 2>&1 &
+          echo $! > "$RUNNER_TEMP/plainq.pid"
+          for attempt in $(seq 1 60); do
+            if curl --fail --silent http://127.0.0.1:18081/health >/dev/null; then exit 0; fi
+            if ! kill -0 "$(cat "$RUNNER_TEMP/plainq.pid")" 2>/dev/null; then cat "$RUNNER_TEMP/plainq.log"; exit 1; fi
+            sleep 1
+          done
+          cat "$RUNNER_TEMP/plainq.log"
+          exit 1
+      - run: npm run test:integration
+        env:
+          PLAINQ_ADDR: 127.0.0.1:18080
+      - name: Broker logs and cleanup
+        if: always()
+        run: |
+          cat "$RUNNER_TEMP/plainq.log" 2>/dev/null || true
+          if test -f "$RUNNER_TEMP/plainq.pid"; then kill "$(cat "$RUNNER_TEMP/plainq.pid")" || true; fi

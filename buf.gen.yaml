@@ -1,0 +1,11 @@
+version: v2
+plugins:
+  - local: protoc-gen-ts_proto
+    out: src/generated
+    opt:
+      - outputServices=grpc-js
+      - env=node
+      - forceLong=bigint
+      - useDate=false
+      - esModuleInterop=true
+      - importSuffix=.js

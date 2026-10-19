@@ -1,0 +1,449 @@
+syntax = "proto3";
+
+package v1;
+
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/plainq/go/v1";
+
+// PlainQ service represents logic of work with PlainQ server.
+service PlainQService {
+  // List all queues on the server.
+  rpc ListQueues(ListQueuesRequest) returns (ListQueuesResponse) {}
+
+  // DescribeQueue returns information about specified queue.
+  rpc DescribeQueue(DescribeQueueRequest) returns (DescribeQueueResponse) {}
+
+  // CreateQueue creates new queue.
+  rpc CreateQueue(CreateQueueRequest) returns (CreateQueueResponse) {}
+
+  // PurgeQueue deletes all messages from the queue.
+  rpc PurgeQueue(PurgeQueueRequest) returns (PurgeQueueResponse) {}
+
+  // DeleteQueue deletes queue.
+  rpc DeleteQueue(DeleteQueueRequest) returns (DeleteQueueResponse) {}
+
+  // Send sends message to the queue.
+  rpc Send(SendRequest) returns (SendResponse) {}
+
+  // Receive receives message from the queue.
+  rpc Receive(ReceiveRequest) returns (ReceiveResponse) {}
+
+  // Delete deletes message from the queue.
+  rpc Delete(DeleteRequest) returns (DeleteResponse) {}
+
+  // ListTopics lists all topics on the server.
+  rpc ListTopics(ListTopicsRequest) returns (ListTopicsResponse) {}
+
+  // CreateTopic creates new topic.
+  rpc CreateTopic(CreateTopicRequest) returns (CreateTopicResponse) {}
+
+  // DeleteTopic deletes topic along with all of its subscriptions.
+  rpc DeleteTopic(DeleteTopicRequest) returns (DeleteTopicResponse) {}
+
+  // Subscribe subscribes a queue to the topic, so every message published
+  // to the topic is fanned out to that queue.
+  rpc Subscribe(SubscribeRequest) returns (SubscribeResponse) {}
+
+  // Unsubscribe removes a subscription from the topic.
+  rpc Unsubscribe(UnsubscribeRequest) returns (UnsubscribeResponse) {}
+
+  // Publish publishes messages to the topic. Publishing with zero subscriptions
+  // succeeds with zero deliveries. Fan-out is synchronous and best-effort: it
+  // attempts every selected destination but is non-atomic across queues. A
+  // failed publish may have retained copies, so retry may duplicate them.
+  rpc Publish(PublishRequest) returns (PublishResponse) {}
+}
+
+// SendMessage represents a message which should be enqueued.
+message SendMessage {
+  // body represents the message content as sequence of bytes.
+  bytes body = 1;
+}
+
+// ReceiveMessage represents a dequeued message.
+message ReceiveMessage {
+  // id represents unique message identifier.
+  string id = 1;
+
+  // body represents the message content as sequence of bytes.
+  bytes body = 2;
+
+  string receipt_handle = 3;
+  uint32 delivery_attempt = 4;
+  google.protobuf.Timestamp lease_expires_at = 5;
+}
+
+// ListQueuesRequest represents a request to list queues.
+message ListQueuesRequest {
+  // Enum for listing queues by basis (ID, Name, CreatedAt).
+  enum OrderBy {
+    ORDER_BY_ID = 0;
+    ORDER_BY_NAME = 1;
+    ORDER_BY_CREATED_AT = 2;
+  }
+
+  // Enum for sort order (Ascending, Descending).
+  enum SortBy {
+    SORT_BY_ASC = 0;
+    SORT_BY_DESC = 1;
+  }
+
+  // Can be specified to search queues names of which starts with this prefix.
+  string queue_prefix = 1;
+
+  // Maximum number of items to return in the response.
+  // Must be >= 1 and <= 100. Default is 10.
+  int32 limit = 2;
+
+  // Cursor for pagination. This should be the queue_id from the previous response.
+  // Leave empty for the first page.
+  string cursor = 3;
+
+  // Determines the Order By Basis for queues.
+  OrderBy order_by = 4;
+
+  // Determines the Sort Order (Ascending, Descending) for queues.
+  SortBy sort_by = 5;
+}
+
+// ListQueuesResponse represents a response to ListQueuesRequest which
+// holds a map of queue names to queue properties.
+message ListQueuesResponse {
+  // List of queue properties
+  repeated DescribeQueueResponse queues = 1;
+
+  // Cursor to get the next page. Empty if there are no more results.
+  string next_cursor = 2;
+
+  // Whether there are more results available
+  bool has_more = 3;
+
+  // Total number of queues matching the request criteria.
+  int64 total_count = 4;
+}
+
+// DescribeQueueRequest represents a request to describe specified queue.
+// Queue can be searched by queue_id or by queue_name.
+// If both are set the queue_id will be used.
+message DescribeQueueRequest {
+  // Represents the unique identifier for the queue.
+  string queue_id = 1;
+
+  // Represents the name of the queue.
+  string queue_name = 2;
+}
+
+// DescribeQueueResponse provides detailed information about a queue.
+message DescribeQueueResponse {
+  // Represents the unique identifier for the queue.
+  string queue_id = 1;
+
+  // Represents the name of the queue.
+  string queue_name = 2;
+
+  // Denotes the timestamp when the queue was created.
+  google.protobuf.Timestamp created_at = 3;
+
+  // Specifies the time after which messages in the queue expire.
+  uint64 retention_period_seconds = 4;
+
+  // Is the time a message stays invisible after being read.
+  uint64 visibility_timeout_seconds = 5;
+
+  // Defines the maximum number of times a message can be read before it is deleted.
+  uint32 max_receive_attempts = 6;
+
+  // Defines queue behaviour when the retention_period_seconds or max_receive_attempts is reached.
+  EvictionPolicy eviction_policy = 7;
+
+  // Is taking effect only when the policy is set to DeadLetter.
+  string dead_letter_queue_id = 100;
+}
+
+// EvictionPolicy represents an enumeration of supported policies.
+enum EvictionPolicy {
+  // EVICTION_POLICY_UNSPECIFIED is a default policy.
+  EVICTION_POLICY_UNSPECIFIED = 0;
+
+  // EVICTION_POLICY_DROP is a default policy.
+  // When queue has to apply the eviction policy to the message, the
+  // message will be dropped (permanently removed) from the queue.
+  EVICTION_POLICY_DROP = 1;
+
+  // EVICTION_POLICY_DEAD_LETTER represents a policy that when applied
+  // to the message, the message will be moved to another queue, which has
+  // been specified as dead letter queue.
+  EVICTION_POLICY_DEAD_LETTER = 2;
+
+  // EVICTION_POLICY_REORDER represents a policy that when applied
+  // to the message, the message will be reinserted in the queue.
+  EVICTION_POLICY_REORDER = 3;
+}
+
+// CreateQueueRequest represents a request to create a queue.
+message CreateQueueRequest {
+  // queue_name represents the name of the queue.
+  string queue_name = 1;
+
+  // retention_period_seconds specifies the time after which messages in the queue expire.
+  uint64 retention_period_seconds = 2;
+
+  // visibility_timeout_seconds is the time a message stays invisible after being read.
+  uint64 visibility_timeout_seconds = 3;
+
+  // max_receive_attempts defines the maximum number of times a message can be read before it is deleted.
+  uint32 max_receive_attempts = 4;
+
+  // eviction_policy defines queue behaviour when the retention_period_seconds or max_receive_attempts is reached.
+  EvictionPolicy eviction_policy = 5;
+
+  // dead_letter_queue_id is taking effect only when the policy is set to DeadLetter.
+  string dead_letter_queue_id = 100;
+}
+
+// CreateQueueResponse represents a request to purge
+// all messages from the specified queue.
+message CreateQueueResponse {
+  // queue_id represents the unique identifier for the queue.
+  string queue_id = 1;
+}
+
+// PurgeQueueRequest
+message PurgeQueueRequest {
+  // queue_id represents the unique identifier for the queue.
+  string queue_id = 1;
+}
+
+// PurgeQueueResponse represents a response the the purge queue request.
+message PurgeQueueResponse {
+  // messages_count represents an amount of deleted messages.
+  uint64 messages_count = 1;
+}
+
+// DeleteQueueRequest
+message DeleteQueueRequest {
+  // queue_id represents the unique identifier for the queue.
+  string queue_id = 1;
+  // force
+  bool force = 2;
+}
+
+// DeleteQueueResponse
+message DeleteQueueResponse {}
+
+// SendRequest represents the request which sends given Messages
+// to the specified queue.
+message SendRequest {
+  // queue_id represents the unique identifier for the queue.
+  string queue_id = 1;
+
+  // messages represents an array of messages which will be send to the queue.
+  repeated SendMessage messages = 2;
+}
+
+// SendResponse represents the response to SendRequest which contain information
+// about the result of enqueueing messages that has been sent with request.
+message SendResponse {
+  // message_ids represents an array of message IDs that has been enqueued.
+  repeated string message_ids = 1;
+}
+
+// ReceiveRequest represents the request which receives Messages
+// from the specified queue.
+message ReceiveRequest {
+  // queue_id represents the unique identifier for the queue.
+  string queue_id = 1;
+
+  // batch_size represents maximum number of messages to receive.
+  // The batch size is limited to 10 messages.
+  // The valid values: from 1 to 10.
+  // If 0 is specified the 1 will be used.
+  uint32 batch_size = 2;
+
+  // wait_time_seconds enables long polling: how long the server holds the
+  // request open waiting for a message before returning an empty response.
+  // The valid values: from 0 to 20.
+  // If 0 is specified the call returns immediately with whatever is available,
+  // which is the short-polling behaviour every client gets today.
+  uint32 wait_time_seconds = 3;
+}
+
+// ReceiveResponse represents the response.
+message ReceiveResponse {
+  // messages represents an array of received messages from the queue.
+  repeated ReceiveMessage messages = 1;
+}
+
+// Delete message represents the request which will delete specified
+// messages from the queue.
+message DeleteRequest {
+  // queue_id represents the unique identifier for the queue.
+  string queue_id = 1;
+
+  // message_ids represents an array of message IDs which identifies
+  // the messages that should be deleted from the queue.
+  repeated string message_ids = 2;
+}
+
+// DeleteResponse represents a response to the DeleteRequest.
+message DeleteResponse {
+  // successful holds an array of message IDs
+  // that has been deleted from the queue.
+  repeated string successful = 1;
+
+  // failed holds an array of message IDs that has not been deleted from the queue
+  // and associated error message.
+  repeated DeleteFailure failed = 2;
+}
+
+// DeleteFailure holds an information about error of message deletion.
+message DeleteFailure {
+  // message_id represents an identifier of the message which has to be deleted.
+  string message_id = 1;
+
+  // error represents an error message which shows why delete message has failed.
+  string error = 2;
+}
+
+// Topic represents a publish/subscribe topic. Its topic_id is an XID and its
+// topic_name is unique. A topic stores no message bodies: publishing to it
+// fans messages out to every subscribed queue.
+message Topic {
+  // topic_id is the topic's XID.
+  string topic_id = 1;
+
+  // topic_name is unique.
+  string topic_name = 2;
+
+  // created_at denotes the timestamp when the topic was created.
+  google.protobuf.Timestamp created_at = 3;
+
+  // subscriptions holds the queues currently subscribed to the topic.
+  repeated Subscription subscriptions = 4;
+}
+
+// Subscription represents a binding between a topic and a queue. Its
+// subscription_id is an XID, and each (topic_id, queue_id) binding is unique.
+message Subscription {
+  // subscription_id is the subscription's XID.
+  string subscription_id = 1;
+
+  // topic_id represents the unique identifier of the subscribed topic.
+  string topic_id = 2;
+
+  // queue_id represents the unique identifier of the queue which receives
+  // the messages published to the topic.
+  string queue_id = 3;
+
+  // queue_name represents the name of the subscribed queue.
+  string queue_name = 4;
+
+  // created_at denotes the timestamp when the subscription was created.
+  google.protobuf.Timestamp created_at = 5;
+}
+
+// PublishMessage represents a message which should be published to a topic.
+message PublishMessage {
+  // body represents the message content as sequence of bytes.
+  bytes body = 1;
+}
+
+// ListTopicsRequest represents a request to list topics.
+message ListTopicsRequest {}
+
+// ListTopicsResponse represents a response to ListTopicsRequest.
+message ListTopicsResponse {
+  // topics holds the topics on the server along with their subscriptions.
+  repeated Topic topics = 1;
+}
+
+// CreateTopicRequest represents a request to create a topic.
+message CreateTopicRequest {
+  // topic_name represents the name of the topic.
+  string topic_name = 1;
+}
+
+// CreateTopicResponse represents a response to CreateTopicRequest.
+message CreateTopicResponse {
+  // topic_id represents the unique identifier for the created topic.
+  string topic_id = 1;
+}
+
+// DeleteTopicRequest represents a request to delete a topic.
+message DeleteTopicRequest {
+  // topic_id represents the unique identifier for the topic.
+  string topic_id = 1;
+}
+
+// DeleteTopicResponse represents a response to DeleteTopicRequest.
+message DeleteTopicResponse {}
+
+// SubscribeRequest represents a request to subscribe a queue to a topic.
+message SubscribeRequest {
+  // topic_id represents the unique identifier for the topic.
+  string topic_id = 1;
+
+  // queue_id represents the unique identifier of the queue which should
+  // receive the messages published to the topic.
+  string queue_id = 2;
+}
+
+// SubscribeResponse represents a response to SubscribeRequest.
+message SubscribeResponse {
+  // subscription_id represents the unique identifier for the created subscription.
+  string subscription_id = 1;
+}
+
+// UnsubscribeRequest represents a request to remove a subscription from a topic.
+message UnsubscribeRequest {
+  // topic_id represents the unique identifier for the topic.
+  string topic_id = 1;
+
+  // subscription_id represents the unique identifier for the subscription.
+  string subscription_id = 2;
+}
+
+// UnsubscribeResponse represents a response to UnsubscribeRequest.
+message UnsubscribeResponse {}
+
+// PublishRequest represents a request which publishes given messages
+// to the specified topic.
+message PublishRequest {
+  // topic_id represents the unique identifier for the topic.
+  string topic_id = 1;
+
+  // messages represents an array of messages which will be published to the topic.
+  repeated PublishMessage messages = 2;
+}
+
+// PublishResponse represents the response to PublishRequest which contains
+// information about the fan-out of the published messages.
+message PublishResponse {
+  // topic_id represents the unique identifier of the topic published to.
+  string topic_id = 1;
+
+  // queue_ids is a flattened list of destination queue identifiers with no
+  // positional relational guarantee to message_ids.
+  repeated string queue_ids = 2;
+
+  // message_ids is a flattened list of enqueued message identifiers with no
+  // positional relational guarantee to queue_ids.
+  repeated string message_ids = 3;
+
+  // delivered_count represents the total number of deliveries performed,
+  // which is the number of published messages times the number of subscribers.
+  uint64 delivered_count = 4;
+}
+
+message QueueDeliveryReceipt { string message_id = 1; string receipt_handle = 2; }
+message QueueDeliveryFailure { string message_id = 1; string code = 2; string message = 3; }
+message QueueNackDelivery { QueueDeliveryReceipt receipt = 1; uint32 available_after_seconds = 2; string reason = 3; }
+message QueueExtendDelivery { QueueDeliveryReceipt receipt = 1; uint32 extension_seconds = 2; }
+message QueueExtendedDelivery { string message_id = 1; string receipt_handle = 2; google.protobuf.Timestamp lease_expires_at = 3; }
+message AcknowledgeQueueRequest { string queue_id = 1; repeated QueueDeliveryReceipt receipts = 2; }
+message AcknowledgeQueueResponse { repeated string successful_message_ids = 1; repeated QueueDeliveryFailure failed = 2; }
+message NackQueueRequest { string queue_id = 1; repeated QueueNackDelivery deliveries = 2; }
+message NackQueueResponse { repeated string successful_message_ids = 1; repeated QueueDeliveryFailure failed = 2; }
+message ExtendQueueLeaseRequest { string queue_id = 1; repeated QueueExtendDelivery deliveries = 2; }
+message ExtendQueueLeaseResponse { repeated QueueExtendedDelivery extended = 1; repeated QueueDeliveryFailure failed = 2; }
