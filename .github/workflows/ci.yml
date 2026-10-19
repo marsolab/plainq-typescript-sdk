@@ -25,7 +25,8 @@ jobs:
       - run: npm pack
       - name: Install packed artifact in a clean consumer
         run: |
-          package="$PWD/$(ls *.tgz)"
+          packages=("$PWD"/*.tgz)
+          package="${packages[0]}"
           cd "$(mktemp -d)"
           npm init -y
           npm install "$package"
@@ -63,7 +64,7 @@ jobs:
         run: |
           "$RUNNER_TEMP/plainq" serve -grpc.addr 127.0.0.1:18080 -http.addr 127.0.0.1:18081 -storage.path "$RUNNER_TEMP/plainq.db" -auth.enable=false -telemetry.enable=false -auth.jwt.secret "$(openssl rand -hex 32)" > "$RUNNER_TEMP/plainq.log" 2>&1 &
           echo $! > "$RUNNER_TEMP/plainq.pid"
-          for attempt in $(seq 1 60); do
+          for _attempt in $(seq 1 60); do
             if curl --fail --silent http://127.0.0.1:18081/health >/dev/null; then exit 0; fi
             if ! kill -0 "$(cat "$RUNNER_TEMP/plainq.pid")" 2>/dev/null; then cat "$RUNNER_TEMP/plainq.log"; exit 1; fi
             sleep 1
